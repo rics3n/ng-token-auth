@@ -21,10 +21,10 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
         return false;
       },
       proxyUrl: '/proxy',
+      rememberMe: false,
       validateOnPageLoad: true,
       forceHardRedirect: false,
       storage: 'cookies',
-      rememberMe: false,
       tokenFormat: {
         "access-token": "{{ token }}",
         "token-type": "Bearer",
@@ -148,6 +148,7 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
               if (this.retrieveData('auth_headers')) {
                 this.getConfig().rememberMe = true;
               }
+
               if (this.getConfig().validateOnPageLoad) {
                 return this.validateUser({
                   config: this.getSavedConfig()
@@ -174,7 +175,9 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
               if (opts == null) {
                 opts = {};
               }
-              this.getConfig(opts.config).rememberMe = (opts.rememberMe ? true : false);
+
+              this.getConfig(opts.config).rememberMe = (opts.rememberMe) ? true : false;
+
               this.initDfd();
               $http.post(this.apiUrl(opts.config) + this.getConfig(opts.config).emailSignInPath, params).success((function(_this) {
                 return function(resp) {
@@ -269,14 +272,16 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
               }
               return this.dfd.promise;
             },
-            setConfigName: function(configName, expiry) {
+            setConfigName: function(configName, expiresIn) {
               if (configName == null) {
                 configName = defaultConfigName;
               }
-              if (this.getConfig(configName).rememberMe && !expiry) {
-                expiry = this.getExpiry();
+
+              if (this.getConfig(configName).rememberMe && !expiresIn) {
+                var expiresIn = this.getExpiry();
               }
-              return this.persistData('currentConfigName', configName, configName, expiry);
+
+              return this.persistData('currentConfigName', configName, configName, expiresIn);
             },
             openAuthWindow: function(provider, opts) {
               var authUrl;
@@ -496,13 +501,14 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
               return headers;
             },
             persistData: function(key, val, configName, expiry) {
-              var expiresIn;
               switch (this.getConfig(configName).storage) {
                 case 'localStorage':
                   return $window.localStorage.setItem(key, JSON.stringify(val));
                 default:
-                  if (this.getConfig(configName).rememberMe && expiry) {
-                    expiresIn = (new Date().setTime(expiry) - new Date()) / 1000;
+                  if (this.getConfig(configName).rememberMe &&  expiry) {
+
+                    var expiresIn = (new Date().setTime(expiry) - new Date()) / 1000;
+
                     return ipCookie(key, val, {
                       path: '/',
                       expires: expiresIn,
@@ -513,6 +519,7 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
                       path: '/'
                     });
                   }
+
               }
             },
             retrieveData: function(key) {
@@ -534,13 +541,16 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
               }
             },
             setAuthHeaders: function(h) {
-              var expiry, newHeaders;
+              var newHeaders;
               newHeaders = angular.extend(this.retrieveData('auth_headers') || {}, h);
-              if (this.getConfig()) {
-                expiry = this.getConfig().parseExpiry(newHeaders);
-                this.setConfigName(this.getCurrentConfigName(), expiry);
+
+              if (this.getConfig().rememberMe && newHeaders.expiry) {
+                var expiresIn = this.getConfig().parseExpiry(newHeaders);
+
+                this.setConfigName(this.getCurrentConfigName(), expiresIn);
               }
-              return this.persistData('auth_headers', newHeaders, null, expiry);
+
+              return this.persistData('auth_headers', newHeaders, null, expiresIn);
             },
             useExternalWindow: function() {
               return !(this.getConfig().forceHardRedirect || $window.isIE());
@@ -599,7 +609,8 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
     ]
   };
 }).config([
-  '$httpProvider', function($httpProvider) {
+  '$httpProvider',
+  function($httpProvider) {
     var httpMethods, tokenIsCurrent, updateHeadersFromResponse;
     tokenIsCurrent = function($auth, headers) {
       var newTokenExpiry, oldTokenExpiry;
@@ -622,11 +633,13 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
       }
     };
     $httpProvider.interceptors.push([
-      '$injector', function($injector) {
+      '$injector',
+      function($injector) {
         return {
           request: function(req) {
             $injector.invoke([
-              '$http', '$auth', function($http, $auth) {
+              '$http', '$auth',
+              function($http, $auth) {
                 var key, val, _ref, _results;
                 if (req.url.match($auth.apiUrl())) {
                   _ref = $auth.retrieveData('auth_headers');
@@ -643,7 +656,8 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
           },
           response: function(resp) {
             $injector.invoke([
-              '$http', '$auth', function($http, $auth) {
+              '$http', '$auth',
+              function($http, $auth) {
                 if (resp.config.url.match($auth.apiUrl())) {
                   return updateHeadersFromResponse($auth, resp);
                 }
@@ -653,7 +667,8 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
           },
           responseError: function(resp) {
             $injector.invoke([
-              '$http', '$auth', function($http, $auth) {
+              '$http', '$auth',
+              function($http, $auth) {
                 if (resp.config.url.match($auth.apiUrl())) {
                   return updateHeadersFromResponse($auth, resp);
                 }
@@ -674,7 +689,8 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
     });
   }
 ]).run([
-  '$auth', '$window', '$rootScope', function($auth, $window, $rootScope) {
+  '$auth', '$window', '$rootScope',
+  function($auth, $window, $rootScope) {
     return $auth.initialize();
   }
 ]);

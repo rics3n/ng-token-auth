@@ -18,7 +18,7 @@ angular.module('ng-token-auth', ['ipCookie'])
         validateOnPageLoad:      true
         forceHardRedirect:       false
         storage:                 'cookies'
-
+        rememberMe:              false
         tokenFormat:
           "access-token": "{{ token }}"
           "token-type":   "Bearer"
@@ -162,6 +162,10 @@ angular.module('ng-token-auth', ['ipCookie'])
             $rootScope.updatePassword       = angular.bind(@, @updatePassword)
             $rootScope.updateAccount        = angular.bind(@, @updateAccount)
 
+            # check if auth headers are set
+            if @retrieveData('auth_headers')
+              this.getConfig().rememberMe = true;
+
             # check to see if user is returning user
             if @getConfig().validateOnPageLoad
               @validateUser({config: @getSavedConfig()})
@@ -187,6 +191,7 @@ angular.module('ng-token-auth', ['ipCookie'])
 
           # capture input from user, authenticate serverside
           submitLogin: (params, opts={}) ->
+            @getConfig(opts.config).rememberMe = (if (opts.rememberMe) then true else false)
             @initDfd()
             $http.post(@apiUrl(opts.config) + @getConfig(opts.config).emailSignInPath, params)
               .success((resp) =>
@@ -289,9 +294,13 @@ angular.module('ng-token-auth', ['ipCookie'])
             @dfd.promise
 
 
-          setConfigName: (configName) ->
+          setConfigName: (configName, expiry) ->
             configName ?= defaultConfigName
-            @persistData('currentConfigName', configName, configName)
+
+            if this.getConfig(configName).rememberMe && !expiry
+              expiry = this.getExpiry();
+
+            @persistData('currentConfigName', configName, configName, expiry)
 
 
           # open external window to authentication provider
@@ -556,12 +565,22 @@ angular.module('ng-token-auth', ['ipCookie'])
 
 
           # abstract persistent data store
-          persistData: (key, val, configName) ->
+          persistData: (key, val, configName, expiry) ->
             switch @getConfig(configName).storage
               when 'localStorage'
                 $window.localStorage.setItem(key, JSON.stringify(val))
               else
-                ipCookie(key, val, {path: '/'})
+                if(@getConfig(configName).rememberMe && expiry)
+                  #calculate the time the data is valid and convert back to sec for ipCookie
+                  expiresIn =  (new Date().setTime(expiry) - new Date())/1000;
+
+                  ipCookie(key, val, {
+                    path: '/',
+                    expires: expiresIn,
+                    expirationUnit: 'seconds'
+                    })
+                else
+                  ipCookie(key, val, {path: '/'})
 
 
           # abstract persistent data retrieval
@@ -584,7 +603,12 @@ angular.module('ng-token-auth', ['ipCookie'])
           # persist authentication token, client id, uid
           setAuthHeaders: (h) ->
             newHeaders = angular.extend((@retrieveData('auth_headers') || {}), h)
-            @persistData('auth_headers', newHeaders)
+
+            if @getConfig()
+              expiry = this.getConfig().parseExpiry(newHeaders)
+              @setConfigName(@getCurrentConfigName(), expiry)
+
+            @persistData('auth_headers', newHeaders, null, expiry)
 
 
           # ie8 + ie9 cannot use xdomain postMessage
