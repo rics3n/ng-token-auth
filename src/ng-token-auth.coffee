@@ -604,7 +604,7 @@ angular.module('ng-token-auth', ['ipCookie'])
           setAuthHeaders: (h) ->
             newHeaders = angular.extend((@retrieveData('auth_headers') || {}), h)
 
-            if @getConfig()
+            if @getConfig().rememberMe
               expiry = this.getConfig().parseExpiry(newHeaders)
               @setConfigName(@getCurrentConfigName(), expiry)
 
