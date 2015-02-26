@@ -3,7 +3,7 @@ module.exports = (config) ->
     basePath : '../../'
 
     preprocessors:
-      'src/*.coffee': ['coffee']
+      'src/*.coffee': ['coverage']
       'test/test/**/*.coffee': ['coffee']
 
     files : [

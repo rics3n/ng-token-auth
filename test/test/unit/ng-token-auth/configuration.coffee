@@ -136,6 +136,7 @@ suite 'configuration', ->
         .respond(201, successResp, newAuthHeader)
 
       ipCookie('auth_headers', validAuthHeader, {path: '/'})
+
       $auth.validateUser()
 
       $httpBackend.flush()
