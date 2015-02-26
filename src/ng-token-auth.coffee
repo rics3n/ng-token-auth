@@ -88,15 +88,20 @@ angular.module('ng-token-auth', ['ipCookie'])
         '$rootScope'
         '$interpolate'
         ($http, $q, $location, ipCookie, $window, $timeout, $rootScope, $interpolate) =>
-          header:            null
-          dfd:               null
-          user:              {}
-          mustResetPassword: false
-          listener:          null
-
+          header:                 null
+          dfd:                    null
+          user:                   {}
+          mustResetPassword:      false
+          listener:               null
+          localStorageAllowed:    false
+          cookieStorageAllowed:   false
+          jsStorage:              {}
           # called once at startup
           initialize: ->
             @initializeListeners()
+            @checkLocalStorage()
+            @checkCookieStorage()
+
             @addScopeMethods()
 
 
@@ -144,6 +149,31 @@ angular.module('ng-token-auth', ['ipCookie'])
               @cancel(error)
               $rootScope.$broadcast('auth:login-error', error)
 
+          checkLocalStorage: ->
+            try
+              # this check have to be wrapped within a try/catch because on
+              # a SecurityError: Dom Exception 18 on iOS
+              if $window.localStorage != null
+                $window.localStorage.setItem(testKey, 'foo');
+                $window.localStorage.removeItem(testKey);
+                @localStorageAllowed = true
+              else
+                @localStorageAllowed = false
+            catch e
+              @localStorageAllowed = false
+
+          checkCookieStorage: ->
+            try
+              # this check have to be wrapped within a try/catch because on
+              # a SecurityError: Dom Exception 18 on iOS
+              if $window.sessionStorage != null
+                $window.sessionStorage.setItem(testKey, 'foo');
+                $window.sessionStorage.removeItem(testKey);
+                @cookieStorageAllowed = true
+              else
+                @cookieStorageAllowed = false
+            catch e
+              @cookieStorageAllowed = false
 
           # make all public API methods available to directives
           addScopeMethods: ->
@@ -164,7 +194,7 @@ angular.module('ng-token-auth', ['ipCookie'])
 
             # check if auth headers are set
             if @retrieveData('auth_headers')
-              this.getConfig().rememberMe = true;
+              @getConfig().rememberMe = true;
 
             # check to see if user is returning user
             if @getConfig().validateOnPageLoad
@@ -569,7 +599,7 @@ angular.module('ng-token-auth', ['ipCookie'])
             switch @getConfig(configName).storage
               when 'localStorage'
                 $window.localStorage.setItem(key, JSON.stringify(val))
-              else
+              when 'cookie'
                 if(@getConfig(configName).rememberMe && expiry)
                   #calculate the time the data is valid and convert back to sec for ipCookie
                   expiresIn =  (new Date().setTime(expiry) - new Date())/1000;
@@ -581,24 +611,29 @@ angular.module('ng-token-auth', ['ipCookie'])
                     })
                 else
                   ipCookie(key, val, {path: '/'})
-
+              else
+                #use js object as strorage
+                @jsStorage[key] = val
 
           # abstract persistent data retrieval
           retrieveData: (key) ->
             switch @getConfig().storage
               when 'localStorage'
                 JSON.parse($window.localStorage.getItem(key))
-              else ipCookie(key)
-
+              when 'cookie'
+                ipCookie(key)
+              else
+                @jsStorage[key]
 
           # abstract persistent data removal
           deleteData: (key) ->
             switch @getConfig().storage
               when 'localStorage'
                 $window.localStorage.removeItem(key)
-              else
+              when 'sessionStorage'
                 ipCookie.remove(key, {path: '/'})
-
+              else
+                delete @jsStorage[key]
 
           # persist authentication token, client id, uid
           setAuthHeaders: (h) ->
@@ -673,10 +708,17 @@ angular.module('ng-token-auth', ['ipCookie'])
             c   = undefined
             key = 'currentConfigName'
 
-            if $window.localStorage
+            if @localStorageAllowed
               c ?= JSON.parse($window.localStorage.getItem(key))
-
-            c ?= ipCookie(key)
+            else if @cookieStorageAllowed
+              c ?= ipCookie(key)
+            else if !c
+              if !@localStorageAllowed && !@cookieStorageAllowed
+                @getConfig(defaultConfigName).storage = 'jsObject'
+              else if !@localStorageAllowed && @cookieStorageAllowed
+                @getConfig(defaultConfigName).storage = 'cookie'
+              else if !@cookieStorageAllowed && @localStorageAllowed
+                @getConfig(defaultConfigName).storage = 'localStorage'
 
             return c || defaultConfigName
 

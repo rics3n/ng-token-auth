@@ -90,8 +90,13 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
             user: {},
             mustResetPassword: false,
             listener: null,
+            localStorageAllowed: false,
+            cookieStorageAllowed: false,
+            jsStorage: {},
             initialize: function() {
               this.initializeListeners();
+              this.checkLocalStorage();
+              this.checkCookieStorage();
               return this.addScopeMethods();
             },
             initializeListeners: function() {
@@ -133,6 +138,36 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
                 };
                 this.cancel(error);
                 return $rootScope.$broadcast('auth:login-error', error);
+              }
+            },
+            checkLocalStorage: function() {
+              var e;
+              try {
+                if ($window.localStorage !== null) {
+                  $window.localStorage.setItem(testKey, 'foo');
+                  $window.localStorage.removeItem(testKey);
+                  return this.localStorageAllowed = true;
+                } else {
+                  return this.localStorageAllowed = false;
+                }
+              } catch (_error) {
+                e = _error;
+                return this.localStorageAllowed = false;
+              }
+            },
+            checkCookieStorage: function() {
+              var e;
+              try {
+                if ($window.sessionStorage !== null) {
+                  $window.sessionStorage.setItem(testKey, 'foo');
+                  $window.sessionStorage.removeItem(testKey);
+                  return this.cookieStorageAllowed = true;
+                } else {
+                  return this.cookieStorageAllowed = false;
+                }
+              } catch (_error) {
+                e = _error;
+                return this.cookieStorageAllowed = false;
               }
             },
             addScopeMethods: function() {
@@ -500,7 +535,7 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
               switch (this.getConfig(configName).storage) {
                 case 'localStorage':
                   return $window.localStorage.setItem(key, JSON.stringify(val));
-                default:
+                case 'cookie':
                   if (this.getConfig(configName).rememberMe && expiry) {
                     expiresIn = (new Date().setTime(expiry) - new Date()) / 1000;
                     return ipCookie(key, val, {
@@ -513,24 +548,31 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
                       path: '/'
                     });
                   }
+                  break;
+                default:
+                  return this.jsStorage[key] = val;
               }
             },
             retrieveData: function(key) {
               switch (this.getConfig().storage) {
                 case 'localStorage':
                   return JSON.parse($window.localStorage.getItem(key));
-                default:
+                case 'cookie':
                   return ipCookie(key);
+                default:
+                  return this.jsStorage[key];
               }
             },
             deleteData: function(key) {
               switch (this.getConfig().storage) {
                 case 'localStorage':
                   return $window.localStorage.removeItem(key);
-                default:
+                case 'sessionStorage':
                   return ipCookie.remove(key, {
                     path: '/'
                   });
+                default:
+                  return delete this.jsStorage[key];
               }
             },
             setAuthHeaders: function(h) {
@@ -583,13 +625,22 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
               var c, key;
               c = void 0;
               key = 'currentConfigName';
-              if ($window.localStorage) {
+              if (this.localStorageAllowed) {
                 if (c == null) {
                   c = JSON.parse($window.localStorage.getItem(key));
                 }
-              }
-              if (c == null) {
-                c = ipCookie(key);
+              } else if (this.cookieStorageAllowed) {
+                if (c == null) {
+                  c = ipCookie(key);
+                }
+              } else if (!c) {
+                if (!this.localStorageAllowed && !this.cookieStorageAllowed) {
+                  this.getConfig(defaultConfigName).storage = 'jsObject';
+                } else if (!this.localStorageAllowed && this.cookieStorageAllowed) {
+                  this.getConfig(defaultConfigName).storage = 'cookie';
+                } else if (!this.cookieStorageAllowed && this.localStorageAllowed) {
+                  this.getConfig(defaultConfigName).storage = 'localStorage';
+                }
               }
               return c || defaultConfigName;
             }
