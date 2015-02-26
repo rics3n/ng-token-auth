@@ -190,6 +190,7 @@ suite 'multiple concurrent auth configurations', ->
 
         $rootScope.submitLogin(args, {config: 'admin'})
         $httpBackend.flush()
+        debugger
         assert.equal('admin', $auth.getCurrentConfigName())
 
 

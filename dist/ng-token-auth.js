@@ -93,6 +93,7 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
             localStorageAllowed: false,
             cookieStorageAllowed: false,
             jsStorage: {},
+            currentStorage: void 0,
             initialize: function() {
               this.initializeListeners();
               this.checkLocalStorage();
@@ -141,9 +142,10 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
               }
             },
             checkLocalStorage: function() {
-              var e;
+              var e, testKey;
               try {
                 if ($window.localStorage !== null) {
+                  testKey = 'ng-token-auth-test';
                   $window.localStorage.setItem(testKey, 'foo');
                   $window.localStorage.removeItem(testKey);
                   return this.localStorageAllowed = true;
@@ -156,11 +158,16 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
               }
             },
             checkCookieStorage: function() {
-              var e;
+              var e, testKey;
               try {
                 if ($window.sessionStorage !== null) {
-                  $window.sessionStorage.setItem(testKey, 'foo');
-                  $window.sessionStorage.removeItem(testKey);
+                  testKey = 'ng-token-auth-test';
+                  ipCookie(testKey, 'foo', {
+                    path: '/'
+                  });
+                  ipCookie.remove(testKey, {
+                    path: '/'
+                  });
                   return this.cookieStorageAllowed = true;
                 } else {
                   return this.cookieStorageAllowed = false;
@@ -535,7 +542,7 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
               switch (this.getConfig(configName).storage) {
                 case 'localStorage':
                   return $window.localStorage.setItem(key, JSON.stringify(val));
-                case 'cookie':
+                case 'cookies':
                   if (this.getConfig(configName).rememberMe && expiry) {
                     expiresIn = (new Date().setTime(expiry) - new Date()) / 1000;
                     return ipCookie(key, val, {
@@ -557,7 +564,7 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
               switch (this.getConfig().storage) {
                 case 'localStorage':
                   return JSON.parse($window.localStorage.getItem(key));
-                case 'cookie':
+                case 'cookies':
                   return ipCookie(key);
                 default:
                   return this.jsStorage[key];
@@ -567,7 +574,7 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
               switch (this.getConfig().storage) {
                 case 'localStorage':
                   return $window.localStorage.removeItem(key);
-                case 'sessionStorage':
+                case 'cookies':
                   return ipCookie.remove(key, {
                     path: '/'
                   });
@@ -629,18 +636,19 @@ angular.module('ng-token-auth', ['ipCookie']).provider('$auth', function() {
                 if (c == null) {
                   c = JSON.parse($window.localStorage.getItem(key));
                 }
-              } else if (this.cookieStorageAllowed) {
+              }
+              if (this.cookieStorageAllowed) {
                 if (c == null) {
                   c = ipCookie(key);
                 }
-              } else if (!c) {
-                if (!this.localStorageAllowed && !this.cookieStorageAllowed) {
-                  this.getConfig(defaultConfigName).storage = 'jsObject';
-                } else if (!this.localStorageAllowed && this.cookieStorageAllowed) {
-                  this.getConfig(defaultConfigName).storage = 'cookie';
-                } else if (!this.cookieStorageAllowed && this.localStorageAllowed) {
-                  this.getConfig(defaultConfigName).storage = 'localStorage';
+              }
+              if (!c) {
+                if (c == null) {
+                  c = this.jsStorage[key];
                 }
+              }
+              if (!this.cookieStorageAllowed && !this.localStorageAllowed) {
+                this.getConfig(c || defaultConfigName).storage = 'jsObject';
               }
               return c || defaultConfigName;
             }
